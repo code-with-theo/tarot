@@ -1,14 +1,18 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CardDeck from '@/components/CardDeck';
 import SpreadDeck from '@/components/SpreadDeck';
 import TarotCardComponent from '@/components/TarotCard';
 import AIReading from '@/components/AIReading';
+import SettingsModal from '@/components/SettingsModal';
 import { useTarotDeck } from '@/hooks/useTarotDeck';
 
 type GamePhase = 'idle' | 'shuffling' | 'selecting' | 'revealing' | 'reading';
+
+const STORAGE_KEY_API = 'tarot_api_key';
+const STORAGE_KEY_PROVIDER = 'tarot_api_provider';
 
 export default function Home() {
   const { 
@@ -27,6 +31,23 @@ export default function Home() {
   const [phase, setPhase] = useState<GamePhase>('idle');
   const [aiReading, setAiReading] = useState<string>('');
   const [isLoadingReading, setIsLoadingReading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [apiProvider, setApiProvider] = useState<'openai' | 'gemini'>('openai');
+
+  useEffect(() => {
+    const savedKey = localStorage.getItem(STORAGE_KEY_API) || '';
+    const savedProvider = (localStorage.getItem(STORAGE_KEY_PROVIDER) as 'openai' | 'gemini') || 'openai';
+    setApiKey(savedKey);
+    setApiProvider(savedProvider);
+  }, []);
+
+  const handleSaveSettings = useCallback((key: string, provider: 'openai' | 'gemini') => {
+    setApiKey(key);
+    setApiProvider(provider);
+    localStorage.setItem(STORAGE_KEY_API, key);
+    localStorage.setItem(STORAGE_KEY_PROVIDER, provider);
+  }, []);
 
   const handleStartShuffle = useCallback(async () => {
     setPhase('shuffling');
@@ -65,6 +86,11 @@ export default function Home() {
   const handleGetReading = useCallback(async () => {
     if (flippedCards.size < 3) return;
     
+    if (!apiKey) {
+      setShowSettings(true);
+      return;
+    }
+    
     setIsLoadingReading(true);
     setPhase('reading');
     
@@ -72,17 +98,21 @@ export default function Home() {
       const response = await fetch('/api/reading', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cards: selectedCards })
+        body: JSON.stringify({ 
+          cards: selectedCards,
+          apiKey,
+          provider: apiProvider
+        })
       });
       
       const data = await response.json();
       setAiReading(data.reading);
     } catch {
-      setAiReading('抱歉，解牌服务暂时不可用，请稍后再试。');
+      setAiReading('抱歉，解牌服务暂时不可用，请检查API密钥是否正确。');
     } finally {
       setIsLoadingReading(false);
     }
-  }, [flippedCards.size, selectedCards]);
+  }, [flippedCards.size, selectedCards, apiKey, apiProvider]);
 
   const allFlipped = flippedCards.size === 3;
   const selectedIds = selectedCards.map(c => c.id);
@@ -100,12 +130,29 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
           >
-            <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-to-r from-yellow-200 via-amber-300 to-yellow-200 bg-clip-text text-transparent tracking-wide">
-              神秘塔罗牌
-            </h1>
+            <div className="flex justify-center items-center gap-4 mb-3">
+              <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-yellow-200 via-amber-300 to-yellow-200 bg-clip-text text-transparent tracking-wide">
+                神秘塔罗牌
+              </h1>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="p-2 rounded-full bg-slate-800/50 hover:bg-slate-700/50 text-slate-400 hover:text-yellow-200 transition-all"
+                title="API 设置"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
             <p className="text-slate-400 text-base tracking-wider">
               探索命运的神秘之旅
             </p>
+            {apiKey && (
+              <p className="text-slate-500 text-xs mt-1">
+                已配置 {apiProvider === 'openai' ? 'OpenAI' : 'Gemini'} API
+              </p>
+            )}
           </motion.header>
 
           <div className="flex flex-col items-center">
@@ -279,6 +326,14 @@ export default function Home() {
           <p>✦ 命运掌握在自己手中 ✦</p>
         </footer>
       </div>
+
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        onSave={handleSaveSettings}
+        currentKey={apiKey}
+        currentProvider={apiProvider}
+      />
     </main>
   );
 }
