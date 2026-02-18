@@ -1,6 +1,6 @@
 import { TarotCard } from '@/types/tarot';
 
-const IMG_BASE = 'https://www.sacred-texts.com/tarot/pkt/img';
+const IMG_BASE = 'https://raw.githubusercontent.com/Arcane-Images/Rider-Waite-Tarot/main/images';
 
 export const tarotCards: TarotCard[] = [
   {
