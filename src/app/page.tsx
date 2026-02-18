@@ -1,65 +1,284 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import CardDeck from '@/components/CardDeck';
+import SpreadDeck from '@/components/SpreadDeck';
+import TarotCardComponent from '@/components/TarotCard';
+import AIReading from '@/components/AIReading';
+import { useTarotDeck } from '@/hooks/useTarotDeck';
+
+type GamePhase = 'idle' | 'shuffling' | 'selecting' | 'revealing' | 'reading';
 
 export default function Home() {
+  const { 
+    shuffledDeck,
+    selectedCards, 
+    isShuffling, 
+    shuffleProgress, 
+    shuffleDeck,
+    selectCard,
+    resetDeck,
+    canSelect,
+    maxSelections
+  } = useTarotDeck();
+  
+  const [flippedCards, setFlippedCards] = useState<Set<number>>(new Set());
+  const [phase, setPhase] = useState<GamePhase>('idle');
+  const [aiReading, setAiReading] = useState<string>('');
+  const [isLoadingReading, setIsLoadingReading] = useState(false);
+
+  const handleStartShuffle = useCallback(async () => {
+    setPhase('shuffling');
+    setFlippedCards(new Set());
+    setAiReading('');
+    await shuffleDeck();
+    setPhase('selecting');
+  }, [shuffleDeck]);
+
+  const handleSelectCard = useCallback((cardId: number) => {
+    selectCard(cardId);
+    if (selectedCards.length + 1 >= maxSelections) {
+      setTimeout(() => setPhase('revealing'), 500);
+    }
+  }, [selectCard, selectedCards.length, maxSelections]);
+
+  const handleFlip = useCallback((id: number) => {
+    setFlippedCards(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleReset = useCallback(() => {
+    resetDeck();
+    setFlippedCards(new Set());
+    setPhase('idle');
+    setAiReading('');
+  }, [resetDeck]);
+
+  const handleGetReading = useCallback(async () => {
+    if (flippedCards.size < 3) return;
+    
+    setIsLoadingReading(true);
+    setPhase('reading');
+    
+    try {
+      const response = await fetch('/api/reading', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cards: selectedCards })
+      });
+      
+      const data = await response.json();
+      setAiReading(data.reading);
+    } catch {
+      setAiReading('抱歉，解牌服务暂时不可用，请稍后再试。');
+    } finally {
+      setIsLoadingReading(false);
+    }
+  }, [flippedCards.size, selectedCards]);
+
+  const allFlipped = flippedCards.size === 3;
+  const selectedIds = selectedCards.map(c => c.id);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <main className="min-h-screen bg-[#0f172a] overflow-x-hidden">
+      <div className="relative min-h-screen pb-20">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-purple-900/10 via-transparent to-transparent" />
+        
+        <div className="relative container mx-auto px-4 py-8">
+          <motion.header 
+            className="text-center mb-8"
+            initial={{ opacity: 0, y: -30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-to-r from-yellow-200 via-amber-300 to-yellow-200 bg-clip-text text-transparent tracking-wide">
+              神秘塔罗牌
+            </h1>
+            <p className="text-slate-400 text-base tracking-wider">
+              探索命运的神秘之旅
+            </p>
+          </motion.header>
+
+          <div className="flex flex-col items-center">
+            <AnimatePresence mode="wait">
+              {phase === 'idle' && (
+                <motion.div key="idle" className="flex flex-col items-center gap-8">
+                  <CardDeck
+                    isShuffling={false}
+                    shuffleProgress={0}
+                    canDraw={false}
+                    onDraw={() => {}}
+                    cardsRemaining={78}
+                  />
+                  <motion.button
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    onClick={handleStartShuffle}
+                    className="px-10 py-4 bg-gradient-to-r from-purple-800 to-indigo-800 hover:from-purple-700 hover:to-indigo-700 text-yellow-200 rounded-full text-lg font-medium tracking-widest border border-yellow-400/30 shadow-lg shadow-purple-900/50 transition-all duration-300 hover:scale-105 hover:shadow-purple-700/50"
+                  >
+                    ✦ 开始洗牌 ✦
+                  </motion.button>
+                </motion.div>
+              )}
+
+              {phase === 'shuffling' && (
+                <motion.div key="shuffling" className="flex flex-col items-center">
+                  <CardDeck
+                    isShuffling={isShuffling}
+                    shuffleProgress={shuffleProgress}
+                    canDraw={false}
+                    onDraw={() => {}}
+                    cardsRemaining={78}
+                  />
+                </motion.div>
+              )}
+
+              {phase === 'selecting' && (
+                <motion.div 
+                  key="selecting"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="w-full"
+                >
+                  <div className="text-center mb-4">
+                    <p className="text-yellow-200/80 text-lg mb-2">
+                      请选择 {maxSelections} 张牌
+                    </p>
+                    <p className="text-slate-400 text-sm">
+                      已选择: {selectedCards.length} / {maxSelections}
+                    </p>
+                  </div>
+                  
+                  <SpreadDeck 
+                    deck={shuffledDeck}
+                    selectedIds={selectedIds}
+                    onSelect={handleSelectCard}
+                    canSelect={canSelect}
+                  />
+
+                  <div className="flex justify-center mt-6">
+                    <button
+                      onClick={handleReset}
+                      className="px-5 py-2.5 bg-slate-800/50 hover:bg-slate-700/50 text-slate-400 rounded-full text-sm font-medium tracking-wider border border-slate-700 transition-all duration-300 hover:scale-105"
+                    >
+                      返回首页
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {phase === 'revealing' && (
+                <motion.div
+                  key="revealing"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="w-full"
+                >
+                  <p className="text-center text-slate-400 text-sm mb-8 tracking-wide">
+                    三张牌无牌阵 · 点击卡牌翻转查看含义
+                  </p>
+                  
+                  <div className="flex flex-wrap justify-center gap-6 md:gap-10 mb-8">
+                    {selectedCards.map((card, index) => (
+                      <div key={card.id} className="flex flex-col items-center">
+                        <span className="text-slate-500 text-xs mb-3 tracking-widest uppercase">
+                          {index === 0 ? '过去' : index === 1 ? '现在' : '未来'}
+                        </span>
+                        <TarotCardComponent
+                          card={card}
+                          isFlipped={flippedCards.has(card.id)}
+                          onFlip={() => handleFlip(card.id)}
+                          index={index}
+                          isDrawn={true}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <motion.div 
+                    className="flex flex-col items-center gap-4"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                  >
+                    {allFlipped && (
+                      <motion.button
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        onClick={handleGetReading}
+                        disabled={isLoadingReading}
+                        className="px-8 py-3 bg-gradient-to-r from-amber-700 to-yellow-700 hover:from-amber-600 hover:to-yellow-600 text-yellow-100 rounded-full text-base font-medium tracking-wider border border-yellow-400/40 shadow-lg transition-all duration-300 hover:scale-105 disabled:opacity-50"
+                      >
+                        {isLoadingReading ? '解牌中...' : '✦ AI 解牌 ✦'}
+                      </motion.button>
+                    )}
+                    
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleStartShuffle}
+                        className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full text-sm font-medium tracking-wider border border-slate-600 transition-all duration-300 hover:scale-105"
+                      >
+                        重新抽牌
+                      </button>
+                      <button
+                        onClick={handleReset}
+                        className="px-5 py-2.5 bg-slate-800/50 hover:bg-slate-700/50 text-slate-400 rounded-full text-sm font-medium tracking-wider border border-slate-700 transition-all duration-300 hover:scale-105"
+                      >
+                        返回首页
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+
+              {phase === 'reading' && (
+                <motion.div
+                  key="reading"
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="w-full max-w-2xl"
+                >
+                  <AIReading 
+                    reading={aiReading} 
+                    isLoading={isLoadingReading}
+                    cards={selectedCards}
+                  />
+                  
+                  <div className="flex justify-center gap-3 mt-8">
+                    <button
+                      onClick={handleStartShuffle}
+                      className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full text-sm font-medium tracking-wider border border-slate-600 transition-all duration-300 hover:scale-105"
+                    >
+                      重新抽牌
+                    </button>
+                    <button
+                      onClick={handleReset}
+                      className="px-5 py-2.5 bg-slate-800/50 hover:bg-slate-700/50 text-slate-400 rounded-full text-sm font-medium tracking-wider border border-slate-700 transition-all duration-300 hover:scale-105"
+                    >
+                      返回首页
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-      </main>
-    </div>
+
+        <footer className="fixed bottom-0 left-0 right-0 text-center py-4 bg-[#0f172a]/80 backdrop-blur-sm text-slate-600 text-sm border-t border-slate-800">
+          <p>✦ 命运掌握在自己手中 ✦</p>
+        </footer>
+      </div>
+    </main>
   );
 }
